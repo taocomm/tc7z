@@ -14,6 +14,7 @@ COMMON_OBJS = \
   $O\Sha256Reg.obj \
   $O\StringConvert.obj \
   $O\StringToInt.obj \
+  $O\UTFConvert.obj \
   $O\MyVector.obj \
   $O\Wildcard.obj \
 
@@ -23,6 +24,7 @@ WIN_OBJS = \
   $O\FileIO.obj \
   $O\FileName.obj \
   $O\PropVariant.obj \
+  $O\PropVariantUtils.obj \
   $O\Synchronization.obj \
   $O\System.obj \
   $O\TimeUtils.obj \
@@ -159,6 +161,7 @@ C_OBJS = \
   $O\Ppmd7.obj \
   $O\Ppmd7Dec.obj \
   $O\Ppmd7Enc.obj \
+  $O\Ppmd7aDec.obj \
   $O\SwapBytes.obj \
   $O\Threads.obj \
 
