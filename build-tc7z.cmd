@@ -2,8 +2,10 @@
 REM =====================================================================
 REM 用 ip7z/7zip 官方源码编译 Total Commander 的 7-Zip 插件 DLL
 REM
-REM 方法与 mcmilk/7-Zip-zstd 完全一致:
-REM   Bundles\Format7z  -> 7za.dll  -> 改名 tc7z.dll / tc7z64.dll / tc7zArm64.dll
+REM tc7z*.dll 的来源:
+REM   自定义 bundle Format7zTC(= 官方 Format7z + RAR/RAR5 解压 handler)
+REM   与老G(TC 作者)自带的 tc7z.dll 功能一致:7z 格式打包/解压 + RAR 解压
+REM   makefile 模板见仓库文件 Format7zTC-makefile
 REM   Bundles\Format7zF -> 7z.dll   -> 完整版解码 DLL(可选,用于替换 7-Zip 本体)
 REM
 REM 用法: build-tc7z.cmd [源码目录] [输出目录]
@@ -31,26 +33,44 @@ if not exist "%VCVARS%" (
 REM ---------- x64 (tc7z64.dll) ----------
 call "%VCVARS%" x64 || exit /b 1
 set "LFLAGS=/SUBSYSTEM:WINDOWS,5.02"
-call :bundle Format7z  x64 7za.dll tc7z64.dll  || exit /b 1
-call :bundle Format7zF x64 7z.dll  7z-x64.dll  || exit /b 1
+call :install_bundle_makefile || exit /b 1
+call :bundle Format7zTC x64 7z.dll tc7z64.dll  || exit /b 1
+call :bundle Format7zF  x64 7z.dll  7z-x64.dll  || exit /b 1
 
 REM ---------- x86 (tc7z.dll) ----------
 call "%VCVARS%" x86 || exit /b 1
 set "LFLAGS=/SUBSYSTEM:WINDOWS,5.01"
-call :bundle Format7z  x86 7za.dll tc7z.dll    || exit /b 1
-call :bundle Format7zF x86 7z.dll  7z-x86.dll  || exit /b 1
+call :install_bundle_makefile || exit /b 1
+call :bundle Format7zTC x86 7z.dll tc7z.dll    || exit /b 1
+call :bundle Format7zF  x86 7z.dll  7z-x86.dll  || exit /b 1
 
 REM ---------- arm64 (tc7zArm64.dll, TC 11+ 支持) ----------
 if /I "%Z7_ARM64%" == "1" (
   call "%VCVARS%" amd64_arm64 || exit /b 1
   set "LFLAGS=/SUBSYSTEM:WINDOWS,6.02"
-  call :bundle Format7z  arm64 7za.dll tc7zArm64.dll || exit /b 1
-  call :bundle Format7zF arm64 7z.dll  7z-arm64.dll  || exit /b 1
+  call :install_bundle_makefile || exit /b 1
+  call :bundle Format7zTC arm64 7z.dll tc7zArm64.dll || exit /b 1
+  call :bundle Format7zF  arm64 7z.dll 7z-arm64.dll  || exit /b 1
 )
 
 echo.
 echo [OK] all DLLs built into %OUT_BASE%
 dir /b "%OUT_BASE%"
+exit /b 0
+
+REM ---------------------------------------------------------------------
+REM :install_bundle_makefile
+REM 把仓库里的 Format7zTC-makefile 模板安装到源码树 Bundles\Format7zTC\
+REM (脚本与本模板文件位于同一目录)
+:install_bundle_makefile
+set "MKDIR=%SRC%\CPP\7zip\Bundles\Format7zTC"
+if not exist "%MKDIR%" mkdir "%MKDIR%"
+set "TPL=%~dp0Format7zTC-makefile"
+if not exist "%TPL%" (
+  echo [ERROR] makefile template not found: %TPL%
+  exit /b 1
+)
+copy /y "%TPL%" "%MKDIR%\makefile" >nul || exit /b 1
 exit /b 0
 
 REM ---------------------------------------------------------------------

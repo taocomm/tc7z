@@ -19,17 +19,23 @@ copy %BIN%\7za.dll %WD%\totalcmd\tc7zArm64.dll
 
 结论:**TC 的 7-Zip 插件 DLL 就是 7-Zip 源码里 `CPP/7zip/Bundles/Format7z` 编译出的
 `7za.dll` 直接改名**,该 bundle 仅含 7z 格式、使用 `Archive2.def` 导出标准 7-Zip 插件
-接口(`CreateObject`、`GetNumberOfFormats` 等),与 Ghisler 自带的 tc7z.dll 同源。
+接口(`CreateObject`、`GetNumberOfFormats` 等)。
+
+进一步对老G随 TC 11.58.1 发布的 `tc7z*.dll` 做 PE 解析后发现:他的版本比 Format7z
+多一个 **RAR/RAR5 解压 handler**(二进制含 `Rar!` 签名字符串,其余格式均无),即
+Ghisler 编译的是「Format7z + RAR 解压」的定制变体(TC 还自带 unrar.dll,但 tc7z
+内部同样能解 RAR)。因此本仓库用自定义 bundle **Format7zTC**(Format7z + RAR handler,
+makefile 模板见 `Format7zTC-makefile`)来编译,替换后功能与老G版本完全对齐。
 ip7z/7zip 官方仓库的构建系统与 mcmilk 分支完全一致(nmake + MSVC,`PLATFORM=x86/x64/arm64`),
 只是 Format7z makefile 少了 zstd 等扩展 codec 的目标——正是我们需要的纯官方版本。
 
-编译命令(在 VS 开发者环境中):
+编译命令(在 VS 开发者环境中,Format7zTC makefile 由 build-tc7z.cmd 注入源码树):
 
 ```
-cd CPP\7zip\Bundles\Format7z
-nmake PLATFORM=x64      → x64\7za.dll → tc7z64.dll
-nmake PLATFORM=x86      → x86\7za.dll → tc7z.dll
-nmake PLATFORM=arm64    → arm64\7za.dll → tc7zArm64.dll
+cd CPP\7zip\Bundles\Format7zTC
+nmake PLATFORM=x64      → x64\7z.dll → tc7z64.dll
+nmake PLATFORM=x86      → x86\7z.dll → tc7z.dll
+nmake PLATFORM=arm64    → arm64\7z.dll → tc7zArm64.dll
 ```
 
 ## 使用方法
