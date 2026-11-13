@@ -104,11 +104,7 @@ jobs:
           Set-Content -Path out\README.txt -Value $readme -Encoding utf8
 
           Push-Location out
-          $files = @("tc7z.dll","tc7z64.dll") +
-                   (Test-Path tc7zArm64.dll ? @("tc7zArm64.dll") : @()) +
-                   (Test-Path 7z-x86.dll ? @("7z-x86.dll") : @()) +
-                   (Test-Path 7z-x64.dll ? @("7z-x64.dll") : @()) +
-                   (Test-Path 7z-arm64.dll ? @("7z-arm64.dll") : @())
+          $files = Get-ChildItem tc7z*.dll, 7z-*.dll | ForEach-Object { $_.Name }
           & "C:\Program Files\7-Zip\7z.exe" a -t7z -mx=9 TotalCmd.7z @files README.txt
           if ($LASTEXITCODE -ne 0) { throw "7z 打包失败" }
           Pop-Location
