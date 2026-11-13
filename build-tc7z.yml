@@ -1,0 +1,162 @@
+name: Build 7-Zip DLLs for Total Commander
+
+# 目标:官方 ip7z/7zip 出新版后,自动用其源码编译 TC 用的 tc7z*.dll
+# 触发方式:
+#   1. 手动 workflow_dispatch(可指定版本号)
+#   2. 每天定时检测 ip7z/7zip 是否有新 release tag,有则自动编译并发 Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "指定 7-Zip 版本号(如 26.06);留空 = 自动检测最新 release"
+        required: false
+        default: ""
+      skip_release:
+        description: "只编译打包,不创建 Release(测试用)"
+        type: boolean
+        default: false
+      build_arm64:
+        description: "同时编译 ARM64 版(tc7zArm64.dll)"
+        type: boolean
+        default: true
+  schedule:
+    # 每天 18:30 UTC = 北京时间凌晨 02:30
+    - cron: "30 18 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检测 7-Zip 版本(手动指定或自动取最新 tag)
+        id: ver
+        shell: pwsh
+        run: |
+          $explicit = "${{ github.event.inputs.version }}".Trim()
+          if ($explicit) {
+            $v = $explicit.TrimStart('v')
+          } else {
+            # 不走 GitHub API,避免限流:直接看 ip7z/7zip 的 git tag
+            $tags = git ls-remote --tags --refs https://github.com/ip7z/7zip.git |
+              ForEach-Object { ($_ -split '/')[-1] } |
+              Sort-Object { [version]($_ -replace '[^0-9.]','') } |
+              Select-Object -Last 1
+            if (-not $tags) { throw "无法从 ip7z/7zip 获取版本 tag" }
+            $v = $tags
+          }
+          Write-Host "目标 7-Zip 版本: $v"
+          $reltag = "7z-$v"
+          # 本仓库已有同名 release tag 则跳过(说明该版本已编译过)
+          $skip = "false"
+          if ("${{ github.event.inputs.skip_release }}" -ne "true") {
+            if (git ls-remote --tags --refs origin "refs/tags/$reltag") {
+              Write-Host "release tag $reltag 已存在,跳过"
+              $skip = "true"
+            }
+          }
+          "version=$v"  >> $env:GITHUB_OUTPUT
+          "reltag=$reltag" >> $env:GITHUB_OUTPUT
+          "skip=$skip"  >> $env:GITHUB_OUTPUT
+
+      - name: 检出 7-Zip 官方源码 (${{ steps.ver.outputs.version }})
+        if: steps.ver.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ip7z/7zip
+          ref: ${{ steps.ver.outputs.version }}
+          path: 7zip-src
+
+      - name: 编译 DLL (x86 / x64 / arm64)
+        if: steps.ver.outputs.skip != 'true'
+        shell: cmd
+        env:
+          Z7_ARM64: ${{ inputs.build_arm64 == false && '0' || '1' }}
+        run: build-tc7z.cmd 7zip-src out
+
+      - name: 打包 TotalCmd.7z 并计算 SHA256
+        if: steps.ver.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $v = "${{ steps.ver.outputs.version }}"
+          $readme = @"
+          Total Commander 7-Zip 插件 DLL — 7-Zip $v
+          ==========================================
+          本 DLL 由 ip7z/7zip 官方源码 tag $v 编译(方法与 mcmilk/7-Zip-zstd 相同):
+            自定义 Format7zTC bundle (7z+RAR)  -> tc7z.dll / tc7z64.dll / tc7zArm64.dll
+            Bundles\SFXWin (7z.sfx)  改名  -> tc7z.sfx(SFX 自解压模块)
+
+          安装:
+            1. 关闭 Total Commander
+            2. 把 tc7z.dll、tc7z64.dll(以及 tc7zArm64.dll)复制到 Total Commander
+               安装目录(覆盖原文件)
+            3. 重启 Total Commander
+
+          说明:
+            - 本 DLL 仅支持标准 7-Zip 格式(与 TC 作者自带的 tc7z.dll 一致)
+            - tc7z.sfx 是 SFX 自解压模块(官方 Bundles\SFXWin),TC 打包自解压
+              .exe 时使用
+            - 7z-x86.dll / 7z-x64.dll / 7z-arm64.dll 是 Bundles\Format7zF (7z.dll)
+              完整版解码 DLL,可用来替换 7-Zip 本体安装目录里的 7z.dll(可选)
+          "@
+          Set-Content -Path out\README.txt -Value $readme -Encoding utf8
+
+          Push-Location out
+          $files = Get-ChildItem tc7z*.dll, tc7z.sfx, 7z-*.dll | ForEach-Object { $_.Name }
+          & "C:\Program Files\7-Zip\7z.exe" a -t7z -mx=9 TotalCmd.7z @files README.txt
+          if ($LASTEXITCODE -ne 0) { throw "7z 打包失败" }
+          Pop-Location
+
+          Get-FileHash -Algorithm SHA256 out\* |
+            ForEach-Object { "$($_.Hash)  $(Split-Path $_.Path -Leaf)" } |
+            Set-Content out\SHA256SUMS.txt
+          Get-Content out\SHA256SUMS.txt
+
+      - name: 创建 Release
+        if: steps.ver.outputs.skip != 'true' && inputs.skip_release != true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $v = "${{ steps.ver.outputs.version }}"
+          $tag = "${{ steps.ver.outputs.reltag }}"
+          $notes = @"
+          自动编译,源码: [ip7z/7zip tag ``$v``](https://github.com/ip7z/7zip/releases/tag/$v)
+
+          **安装到 Total Commander**:下载 ``TotalCmd.7z``,把 tc7z.dll、tc7z64.dll
+          (及 tc7zArm64.dll)复制到 Total Commander 安装目录覆盖原文件。
+
+          | 文件 | 说明 |
+          |---|---|
+          | ``TotalCmd.7z`` | 打包好的 TC 插件 DLL(推荐下载这个) |
+          | ``tc7z.dll`` | TC 用 32 位插件(Format7z / 7za.dll) |
+          | ``tc7z64.dll`` | TC 用 64 位插件 |
+          | ``tc7zArm64.dll`` | TC 用 ARM64 插件 |
+          | ``tc7z.sfx`` | SFX 自解压模块(TC 打包自解压 .exe 用) |
+          | ``7z-x86.dll`` / ``7z-x64.dll`` / ``7z-arm64.dll`` | 完整版 7z.dll(Format7zF),替换 7-Zip 本体用 |
+          | ``SHA256SUMS.txt`` | 校验和 |
+
+          仅包含 7-Zip 官方标准格式(不含 zstd/brotli 等扩展 codec)。
+          "@
+          Set-Content -Path notes.md -Value $notes -Encoding utf8
+          $files = Get-ChildItem out | ForEach-Object { $_.FullName }
+          gh release create $tag --title "7-Zip $v for Total Commander" --notes-file notes.md @files
+          Write-Host "Release $tag 已创建"
+
+      - name: 构建摘要
+        if: always()
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          $skip = "${{ steps.ver.outputs.skip }}"
+          if ($skip -eq "true") {
+            "7-Zip $v 之前已编译过,本次跳过(可用手动触发 + skip_release 测试重编)" >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            "7-Zip $v 编译完成,产物见上方 Release / out 目录" >> $env:GITHUB_STEP_SUMMARY
+          }

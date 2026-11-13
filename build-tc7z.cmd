@@ -37,12 +37,14 @@ call :install_bundle_makefile || exit /b 1
 call :bundle Format7zTC x64 7z.dll tc7z64.dll  || exit /b 1
 call :bundle Format7zF  x64 7z.dll  7z-x64.dll  || exit /b 1
 
-REM ---------- x86 (tc7z.dll) ----------
+REM ---------- x86 (tc7z.dll + tc7z.sfx) ----------
 call "%VCVARS%" x86 || exit /b 1
 set "LFLAGS=/SUBSYSTEM:WINDOWS,5.01"
 call :install_bundle_makefile || exit /b 1
 call :bundle Format7zTC x86 7z.dll tc7z.dll    || exit /b 1
 call :bundle Format7zF  x86 7z.dll  7z-x86.dll  || exit /b 1
+REM SFX 自解压模块(对应老G的 tc7z.sfx,32 位可在所有 Windows 运行)
+call :bundle SFXWin     x86 7z.sfx tc7z.sfx NOEXPORT || exit /b 1
 
 REM ---------- arm64 (tc7zArm64.dll, TC 11+ 支持) ----------
 if /I "%Z7_ARM64%" == "1" (
@@ -78,8 +80,9 @@ copy /y "%FMT7Z%\resource.rc" "%MKDIR%\" >nul || exit /b 1
 exit /b 0
 
 REM ---------------------------------------------------------------------
-REM :bundle <bundle名> <平台> <makefile产物名> <输出文件名>
+REM :bundle <bundle名> <平台> <makefile产物名> <输出文件名> [NOEXPORT]
 REM 编译单个 bundle 并把产物复制到 OUT_BASE,校验 CreateObject 导出
+REM (第5个参数为 NOEXPORT 时跳过导出校验,用于 SFX 模块等非 DLL 产物)
 :bundle
 echo.
 echo ====== build %~1 (%~2)  -^>  %~4 ======
@@ -90,6 +93,10 @@ if not exist "%~2\%~3" (
   exit /b 1
 )
 copy /y "%~2\%~3" "%OUT_BASE%\%~4" >nul || exit /b 1
+if /I "%~5" == "NOEXPORT" (
+  echo [OK] %~4 built ^(no export check^)
+  exit /b 0
+)
 dumpbin /EXPORTS "%OUT_BASE%\%~4" | findstr /C:"CreateObject" >nul
 if errorlevel 1 (
   echo [ERROR] %~4: missing CreateObject export, not a valid 7-Zip codec DLL
