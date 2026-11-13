@@ -64,6 +64,7 @@ REM 把仓库里的 Format7zTC-makefile 模板安装到源码树 Bundles\Format7
 REM (脚本与本模板文件位于同一目录)
 :install_bundle_makefile
 set "MKDIR=%SRC%\CPP\7zip\Bundles\Format7zTC"
+set "FMT7Z=%SRC%\CPP\7zip\Bundles\Format7z"
 if not exist "%MKDIR%" mkdir "%MKDIR%"
 set "TPL=%~dp0Format7zTC-makefile"
 if not exist "%TPL%" (
@@ -71,6 +72,9 @@ if not exist "%TPL%" (
   exit /b 1
 )
 copy /y "%TPL%" "%MKDIR%\makefile" >nul || exit /b 1
+copy /y "%FMT7Z%\StdAfx.cpp" "%MKDIR%\" >nul || exit /b 1
+copy /y "%FMT7Z%\StdAfx.h"   "%MKDIR%\" >nul || exit /b 1
+copy /y "%FMT7Z%\resource.rc" "%MKDIR%\" >nul || exit /b 1
 exit /b 0
 
 REM ---------------------------------------------------------------------
