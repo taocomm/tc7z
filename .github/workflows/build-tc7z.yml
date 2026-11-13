@@ -88,7 +88,8 @@ jobs:
           Total Commander 7-Zip 插件 DLL — 7-Zip $v
           ==========================================
           本 DLL 由 ip7z/7zip 官方源码 tag $v 编译(方法与 mcmilk/7-Zip-zstd 相同):
-            Bundles\Format7z (7za.dll)  改名  -> tc7z.dll / tc7z64.dll / tc7zArm64.dll
+            自定义 Format7zTC bundle (7z+RAR)  -> tc7z.dll / tc7z64.dll / tc7zArm64.dll
+            Bundles\SFXWin (7z.sfx)  改名  -> tc7z.sfx(SFX 自解压模块)
 
           安装:
             1. 关闭 Total Commander
@@ -98,13 +99,15 @@ jobs:
 
           说明:
             - 本 DLL 仅支持标准 7-Zip 格式(与 TC 作者自带的 tc7z.dll 一致)
+            - tc7z.sfx 是 SFX 自解压模块(官方 Bundles\SFXWin),TC 打包自解压
+              .exe 时使用
             - 7z-x86.dll / 7z-x64.dll / 7z-arm64.dll 是 Bundles\Format7zF (7z.dll)
               完整版解码 DLL,可用来替换 7-Zip 本体安装目录里的 7z.dll(可选)
           "@
           Set-Content -Path out\README.txt -Value $readme -Encoding utf8
 
           Push-Location out
-          $files = Get-ChildItem tc7z*.dll, 7z-*.dll | ForEach-Object { $_.Name }
+          $files = Get-ChildItem tc7z*.dll, tc7z.sfx, 7z-*.dll | ForEach-Object { $_.Name }
           & "C:\Program Files\7-Zip\7z.exe" a -t7z -mx=9 TotalCmd.7z @files README.txt
           if ($LASTEXITCODE -ne 0) { throw "7z 打包失败" }
           Pop-Location
@@ -135,6 +138,7 @@ jobs:
           | ``tc7z.dll`` | TC 用 32 位插件(Format7z / 7za.dll) |
           | ``tc7z64.dll`` | TC 用 64 位插件 |
           | ``tc7zArm64.dll`` | TC 用 ARM64 插件 |
+          | ``tc7z.sfx`` | SFX 自解压模块(TC 打包自解压 .exe 用) |
           | ``7z-x86.dll`` / ``7z-x64.dll`` / ``7z-arm64.dll`` | 完整版 7z.dll(Format7zF),替换 7-Zip 本体用 |
           | ``SHA256SUMS.txt`` | 校验和 |
 
